@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark">
   <title>智能座舱AIGC · 离线节点工作台</title>
   <link rel="stylesheet" href="/styles.css">
+  <script src="/template-core.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -21,6 +22,7 @@
         <button class="preset" data-preset="image-video"><span class="preset-icon">▣</span><span>图生视频<small>Image to video</small></span></button>
         <button class="preset" data-preset="reference-video"><span class="preset-icon">▦</span><span>参考生视频<small>Ref2VA · 多图参考</small></span></button>
       </nav>
+      <button class="template-library-entry" id="open-templates-sidebar" aria-haspopup="dialog" aria-controls="templates-dialog"><span class="template-entry-icon" aria-hidden="true">▤</span><span>官方 Skill 模板库<small>9 个创作流程 · 离线可用</small></span></button>
       <div class="sidebar-heading library-heading">节点库 <span>添加到画布</span></div>
       <div class="node-library">
         <button data-add-node="prompt"><span class="library-dot pink"></span>文本提示词 <span>＋</span></button>
@@ -39,7 +41,7 @@
         <div class="breadcrumb">工作空间<span>/</span><strong>未命名工作流</strong><span id="saved-indicator" class="saved-dot" title="已保存到此浏览器"></span></div>
         <div class="topbar-actions"><button id="import-workflow" class="button subtle">导入工作流</button><button id="export-workflow" class="button subtle">导出工作流</button><span class="topbar-separator"></span><button id="run-top" class="button primary"><span>▶</span> 运行工作流 <kbd>Ctrl ↵</kbd></button></div>
       </header>
-      <div class="workspace-heading"><div><div class="eyebrow">CREATE SOMETHING NEW</div><h1 id="workflow-title">图像创作工作流 <span>01</span></h1><p id="workflow-subtitle">让想象从一句话开始，在节点间自由连接。</p></div><button id="history-toggle" class="button history-button">◷ 任务记录 <span id="job-count">0</span></button></div>
+      <div class="workspace-heading"><div><div class="eyebrow">CREATE SOMETHING NEW</div><h1 id="workflow-title">图像创作工作流 <span>01</span></h1><p id="workflow-subtitle">让想象从一句话开始，在节点间自由连接。</p></div><div class="workspace-actions"><button id="open-templates" class="button template-open-button" aria-haspopup="dialog" aria-controls="templates-dialog">▤ 模板库</button><button id="history-toggle" class="button history-button">◷ 任务记录 <span id="job-count">0</span></button></div></div>
       <div class="deployment-banner" id="deployment-banner"><span class="banner-icon">i</span><span><strong>本地部署预检中</strong><span id="deployment-message">正在检查模型、依赖与硬件。原版完整模型在 16 GB 显存上的可用性尚未验证。</span></span><button id="banner-system" aria-label="查看部署检查">详情</button></div>
       <div class="editor-layout">
         <section class="canvas-panel" aria-label="工作流节点画布">
@@ -86,6 +88,29 @@
   </div>
   <input type="file" id="workflow-file" accept="application/json,.json" hidden>
   <input type="file" id="reference-file" accept="image/png,image/jpeg,image/webp" hidden>
+  <dialog id="templates-dialog" class="templates-dialog" aria-labelledby="templates-dialog-title">
+    <div class="dialog-header template-dialog-header"><div><div class="eyebrow">OFFICIAL SKILL TEMPLATES · OFFLINE</div><h2 id="templates-dialog-title">官方 Skill 模板库</h2></div><button class="icon-button" data-close-dialog="templates-dialog" aria-label="关闭模板库">×</button></div>
+    <p class="template-library-note">选择创作流程，填写需求，逐镜审阅后应用到画布。复杂项目需要人工审阅与后期剪辑。</p>
+    <div id="template-load-state" class="template-load-state" role="status" aria-live="polite">正在加载本地模板…</div>
+    <button id="retry-templates" class="button" hidden>重新加载模板</button>
+    <section id="template-catalog" hidden aria-label="模板列表">
+      <div class="template-search-row"><label for="template-search">搜索模板<input type="search" id="template-search" placeholder="搜索名称、场景或类别" autocomplete="off" maxlength="100"></label><span id="template-result-count" role="status" aria-live="polite"></span></div>
+      <div class="template-card-grid" id="template-cards"></div>
+      <div class="template-no-results" id="template-no-results" hidden><strong>没有找到匹配的模板</strong><span>试试「广告」「角色」或「分镜」，也可以清空搜索查看全部。</span><button id="clear-template-search" class="button">清空搜索</button></div>
+      <p class="template-source-line" id="template-catalog-source"></p>
+    </section>
+    <section id="template-detail" hidden aria-label="模板详情">
+      <div class="template-detail-toolbar"><button id="template-back" class="button subtle">返回全部模板</button><a id="template-source-link" class="template-source-link" target="_blank" rel="noopener noreferrer">查看官方原文</a></div>
+      <div class="template-detail-heading"><span id="template-category" class="template-category"></span><h3 id="template-name"></h3><p id="template-summary"></p></div>
+      <ol class="template-stages" id="template-stages" aria-label="创作阶段"></ol>
+      <div class="template-editor-grid">
+        <section class="template-field-panel" aria-labelledby="template-fields-title"><div class="template-panel-heading"><h4 id="template-fields-title">创作需求</h4><span>填写后实时预览</span></div><form id="template-fields"></form><p class="template-draft-note" id="template-draft-status">需求草稿会在此浏览器中保留，切换镜头不会清空。</p></section>
+        <section class="template-shot-panel" aria-labelledby="template-shots-title"><div class="template-panel-heading"><h4 id="template-shots-title">镜头与提示词</h4><span id="template-shot-count"></span></div><div id="template-shots" class="template-shot-list" role="group" aria-label="选择镜头"></div><div class="template-shot-description"><strong id="template-shot-title"></strong><p id="template-shot-description"></p><span id="template-shot-settings"></span></div><label class="template-preview-label" for="template-prompt-preview">H3 提示词 <span id="template-prompt-count"></span></label><textarea id="template-prompt-preview" maxlength="16000" readonly spellcheck="false" aria-describedby="template-preview-error" placeholder="填写创作需求后预览提示词"></textarea><p id="template-preview-error" class="template-preview-error" role="status" aria-live="polite" hidden></p><div id="template-reference-status" class="template-reference-status" role="status"></div></section>
+      </div>
+      <details class="template-review"><summary>审阅清单与使用说明 <span id="template-review-count"></span></summary><ul id="template-checklist"></ul><ul id="template-notes" class="template-notes"></ul></details>
+      <div class="template-detail-actions"><span>应用镜头只更新画布，运行需单独点击。</span><div><button id="export-template-plan" class="button">导出全部分镜计划</button><button id="apply-template-shot" class="button primary">应用此镜头到画布</button></div></div>
+    </section>
+  </dialog>
   <dialog id="system-dialog"><div class="dialog-header"><div><div class="eyebrow">LOCAL DEPLOYMENT</div><h2>本地部署检查</h2></div><button class="icon-button" data-close-dialog="system-dialog" aria-label="关闭">×</button></div><div id="system-details"></div><div class="dialog-actions"><button id="recheck-system" class="button primary">重新检查</button><button class="button" data-close-dialog="system-dialog">关闭</button></div></dialog>
   <dialog id="preview-dialog" class="preview-dialog"><div class="dialog-header"><h2 id="preview-title">生成结果</h2><button class="icon-button" data-close-dialog="preview-dialog" aria-label="关闭">×</button></div><div id="preview-content"></div></dialog>
   <dialog id="confirm-dialog"><div class="dialog-header"><h2>替换当前工作流？</h2></div><p class="confirm-copy">此操作会替换画布上的节点、连接和参数。可先通过「导出」保存当前工作流。</p><div class="dialog-actions"><button class="button" id="confirm-no">保留当前工作流</button><button class="button primary" id="confirm-yes">替换工作流</button></div></dialog>

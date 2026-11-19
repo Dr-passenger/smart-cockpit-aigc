@@ -1,0 +1,1173 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "https://github.com/MiniMax-AI/MiniMax-H3",
+    "revision": "199b7d0e1fd95e7b3eafa8c15eca692534142427",
+    "url": "https://github.com/MiniMax-AI/MiniMax-H3/tree/199b7d0e1fd95e7b3eafa8c15eca692534142427/skills"
+  },
+  "templates": [
+    {
+      "id": "h3-prompt-writing",
+      "name": "H3 提示词：文本、首帧与参考",
+      "category": "提示词与模式",
+      "summary": "同一座舱创意分别改写为文生视频、首帧图生视频及真正 Ref2VA，比较时间线与参考约束。",
+      "source_url": "https://github.com/MiniMax-AI/MiniMax-H3/blob/199b7d0e1fd95e7b3eafa8c15eca692534142427/skills/h3-prompt-writing/SKILL.md",
+      "fields": [
+        {
+          "id": "subject",
+          "label": "主体与外观",
+          "type": "text",
+          "default": "a stationary concept electric car cabin with cream woven seats and a teal ambient-light strip",
+          "required": true
+        },
+        {
+          "id": "scene",
+          "label": "场景与光线",
+          "type": "text",
+          "default": "a parked car in a quiet studio, soft daylight enters from the left",
+          "required": true
+        },
+        {
+          "id": "action",
+          "label": "一个主要动作",
+          "type": "text",
+          "default": "a passenger presses one physical comfort button; the teal light gently brightens and then holds",
+          "required": true
+        },
+        {
+          "id": "identity",
+          "label": "需要保留的外观",
+          "type": "text",
+          "default": "seat stitching, dashboard outline, screen proportions and teal accent color",
+          "required": true
+        },
+        {
+          "id": "reference_role",
+          "label": "Picture 1 的参考作用",
+          "type": "text",
+          "default": "the cabin layout and material appearance, without copying any printed text",
+          "required": true
+        },
+        {
+          "id": "music",
+          "label": "非场景配乐方向",
+          "type": "text",
+          "default": "two soft marimba notes over a slow sustained synth pad, no vocals",
+          "required": true
+        }
+      ],
+      "stages": [
+        "先选输入模式，填写主体、动作和参考角色",
+        "审核时间线、参考标签与可见文字",
+        "只执行所需模式并人工检查结果"
+      ],
+      "checklist": [
+        "每镜先交代构图，再写可观察动作、运镜幅度和速度",
+        "首帧模式的动作从图片状态出发，不能立即换场",
+        "Ref2VA 标签只指向实际上传图片，角色与材质保持一致",
+        "场内声音和观众听到的配乐分开，不在环境音重复台词"
+      ],
+      "notes": [
+        "三项是同一简报的模式变体，不是必须连续执行的三镜短片。",
+        "首帧模式需上传一张首帧；Ref2VA 默认也只引用 <Picture 1>，但把它作为身份/风格参考而非锁定首帧。增加图片后需自行补齐各段标签和作用。",
+        "表单不自动翻译；英文描述有利于贴合官方指南，台词和画面文字应保留其原始语言。FL2VA/L2VA 仅保留为官方扩展知识，本地界面未提供尾帧输入。",
+        "本模板通过离线表单替换字段，不调用 LLM，不自动核验资料、分析音乐、识别图片或改写用户内容。",
+        "逐项选择分镜并手动执行；需要图片输入时，请先保存、检查并自行上传或选择正确参考图，不会自动串联前一步输出。",
+        "图像 1024×1024、视频 512×512/4 秒为低显存探测设置；画质、耗时与显存均未保证。H3 帧网格会令名义 4 秒约为 4.458 秒。"
+      ],
+      "shots": [
+        {
+          "id": "text-mode",
+          "title": "纯文本：建立并完成一个动作",
+          "preset": "text-video",
+          "description": "无需参考图，检查主体、位置、动作和音画关系。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] Live-action concept visualization of {{subject}} in {{scene}}. Begin with a medium-wide composition, console centered and the seat visible at right. During 0-1s establish the still cabin. During 1-3s {{action}}. The camera pushes in with small amplitude at slow speed; during 3-4s it stops and holds the result. Preserve {{identity}}. No road driving, no extra interface panels, no unrequested readable text.",
+            "soundscape": "Low ventilation room tone continues; one tactile switch click occurs at the press, followed by a short restrained confirmation chime.",
+            "music": "{{music}}"
+          }
+        },
+        {
+          "id": "first-frame-mode",
+          "title": "首帧：从已确认座舱图发展",
+          "preset": "image-video",
+          "description": "手动选择一张座舱首帧；只让明确动作发生。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] Begin in the exact visible composition of <Picture 1>, showing {{subject}} in {{scene}}. Preserve {{identity}}, object positions and the direction of the light. From 0-1s the existing cabin remains stable. From 1-3s {{action}} without adding new objects. The camera makes one small, slow push in. From 3-4s hold the completed state; no cut, no reset to another cabin, no added text.",
+            "soundscape": "The same quiet ventilation continues. Synchronize one physical button click with contact and keep the confirmation chime low.",
+            "music": "{{music}}"
+          }
+        },
+        {
+          "id": "reference-mode",
+          "title": "Ref2VA：身份和材质参考",
+          "preset": "reference-video",
+          "description": "上传一张图片作为外观参考；允许新机位，不把它冒充第一帧。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "The target video is a restrained live-action concept visualization. [Shot 1] Show <Subject 1>, {{subject}}, in {{scene}}, from a new three-quarter view. The reference provides appearance rather than an exact first-frame composition. Establish the console and right-hand seat during 0-1s. During 1-3s {{action}}. The camera trucks right with small amplitude at slow speed, then holds during 3-4s. Keep {{identity}} visible and stable. No unrequested text or additional controls.",
+            "soundscape": "Low ventilation and a single button click; a short confirmation chime follows the physical action.",
+            "music": "{{music}}",
+            "reference": {
+              "subject_definitions": "<Subject 1> is the visible cabin in <Picture 1>. Reference role: {{reference_role}}. Track these appearance features: {{identity}}.",
+              "summary": "[reference generation] Create a new view of <Subject 1> for a short concept demonstration: {{action}}.",
+              "retention_analysis": "<Subject 1> (appears in [Shot 1]): fully_preserved - retain {{identity}}. <Picture 1> supplies {{reference_role}}; its original viewpoint is not a required target frame."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "brand-promo-video-generator",
+      "name": "品牌宣传：从场景到产品回报",
+      "category": "品牌与产品",
+      "summary": "先列真实素材和功能边界，再用场景、交互、回报组织一条短品牌概念片。",
+      "source_url": "https://github.com/MiniMax-AI/MiniMax-H3/blob/199b7d0e1fd95e7b3eafa8c15eca692534142427/skills/brand-promo-video-generator/SKILL.cn.md",
+      "fields": [
+        {
+          "id": "brand",
+          "label": "项目或品牌名",
+          "type": "text",
+          "default": "CabinFlow concept",
+          "required": true
+        },
+        {
+          "id": "feature",
+          "label": "本次只展示的功能",
+          "type": "text",
+          "default": "one physical button changes the parked cabin from cool neutral light to a warm rest setting",
+          "required": true
+        },
+        {
+          "id": "audience",
+          "label": "受众与使用场景",
+          "type": "text",
+          "default": "a passenger taking a quiet break in a stationary car",
+          "required": true
+        },
+        {
+          "id": "palette",
+          "label": "品牌色与材质",
+          "type": "text",
+          "default": "warm cream fabric, graphite trim and one muted teal accent",
+          "required": true
+        },
+        {
+          "id": "claim",
+          "label": "概念文案或已核验主张",
+          "type": "text",
+          "default": "A pause that feels yours",
+          "required": true
+        },
+        {
+          "id": "facts",
+          "label": "素材来源与事实边界",
+          "type": "text",
+          "default": "Original concept with no production specifications, no performance statistics and no official brand logos",
+          "required": true
+        }
+      ],
+      "stages": [
+        "人工填写素材来源与功能事实表",
+        "确认场景—动作—结果的故事主线",
+        "先看主视觉再按镜头生成片段",
+        "人工检查品牌保真并在本地剪辑软件组装"
+      ],
+      "checklist": [
+        "功能、主张与素材来源是否一致，概念内容是否清楚标注",
+        "单镜只突出一个主要动作，控制面板和文字不要抢主体",
+        "LOGO、字体与真实产品截图需人工使用正确原件",
+        "结尾回报与开头需求形成因果关系，不能用特效代替证据"
+      ],
+      "notes": [
+        "本地表单不打开官网、不验证素材真实性；facts 是制作备注，需用户自行核验。",
+        "概念图不能当作量产功能证据。真实 LOGO、界面原件及精确 CTA 合成需外部本地后期，生成模型不能保证标识或文字逐像素保真。",
+        "每段各自生成原生音轨，不会自动无缝合成或统一响度。",
+        "本模板通过离线表单替换字段，不调用 LLM，不自动核验资料、分析音乐、识别图片或改写用户内容。",
+        "逐项选择分镜并手动执行；需要图片输入时，请先保存、检查并自行上传或选择正确参考图，不会自动串联前一步输出。",
+        "图像 1024×1024、视频 512×512/4 秒为低显存探测设置；画质、耗时与显存均未保证。H3 帧网格会令名义 4 秒约为 4.458 秒。"
+      ],
+      "shots": [
+        {
+          "id": "brand-keyvisual",
+          "title": "场景主视觉确认图",
+          "preset": "text-image",
+          "description": "先检查产品与受众场景；作为后续首帧候选。",
+          "settings": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 6,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Create one clean full-frame concept key visual for {{brand}}. The subject is {{audience}}. Demonstrate only this intended idea: {{feature}}. Use {{palette}} with soft left-side daylight, a readable console silhouette and generous negative space. Show a parked car, no road driving. Production note: {{facts}}. No invented logo, figures, certification badges, captions or decorative HUD. The output is a single scene, not a storyboard.",
+            "soundscape": "N/A",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "brand-mechanism",
+          "title": "交互机制：动作产生可见结果",
+          "preset": "image-video",
+          "description": "选择已检查的主视觉图作为首帧。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] Begin with the composition and cabin appearance in <Picture 1>. This is a concept scene for {{brand}} with {{palette}}. During 0-1s establish the current control and lighting state. During 1-3s visibly demonstrate {{feature}}, using one clear hand action and one visual response. The camera makes a small slow push toward the control. During 3-4s hold the completed setting. Preserve product geometry and the passenger's position. No invented metrics, logos or additional panels.",
+            "soundscape": "Quiet cabin ventilation, a physical switch click and a brief restrained interface tone. No spoken marketing claims.",
+            "music": "A sparse slow plucked-synth pattern, low in volume, no vocals."
+          }
+        },
+        {
+          "id": "brand-payoff",
+          "title": "体验回报与概念收束",
+          "preset": "text-video",
+          "description": "单独生成回报镜；与首镜素材人工比对并在外部剪辑。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] Medium-wide view of {{audience}} in the same {{palette}} concept cabin for {{brand}}. During 0-1s establish the already completed comfort state. During 1-3s the passenger relaxes their shoulders and places a hand on the fabric armrest; the camera holds still. During 3-4s keep the cabin stable with clear negative space. The creative message is {{claim}}; do not render this sentence or a logo into the shot. Show an observable quiet pause rather than unverified product claims.",
+            "soundscape": "Soft fabric movement and low ventilation, no dialogue or voiceover.",
+            "music": "A sustained soft chord with two widely spaced plucked notes, ending without a large swell."
+          }
+        }
+      ]
+    },
+    {
+      "id": "minimalist-product-ad-generator",
+      "name": "极简产品广告：三张独立锚定图",
+      "category": "品牌与产品",
+      "summary": "保留产品颜色和结构，用主视觉、细节、结尾三张独立图锁定一条克制的产品片。",
+      "source_url": "https://github.com/MiniMax-AI/MiniMax-H3/blob/199b7d0e1fd95e7b3eafa8c15eca692534142427/skills/minimalist-product-ad-generator/SKILL.cn.md",
+      "fields": [
+        {
+          "id": "product",
+          "label": "产品与独特形态",
+          "type": "text",
+          "default": "a compact circular in-car comfort controller with a knurled metal dial",
+          "required": true
+        },
+        {
+          "id": "color",
+          "label": "产品真实主色",
+          "type": "text",
+          "default": "deep teal with a graphite lower ring",
+          "required": true
+        },
+        {
+          "id": "material",
+          "label": "材质与可见结构",
+          "type": "text",
+          "default": "matte anodized aluminum, a precise knurled edge and one shallow physical button",
+          "required": true
+        },
+        {
+          "id": "action",
+          "label": "一个真实可见动作",
+          "type": "text",
+          "default": "the knurled dial rotates a small angle and settles into one detent",
+          "required": true
+        },
+        {
+          "id": "copy",
+          "label": "单行英文概念文案（3–5词）",
+          "type": "text",
+          "default": "Comfort Within Easy Reach",
+          "required": true
+        },
+        {
+          "id": "background",
+          "label": "背景与光线方向",
+          "type": "text",
+          "default": "a matte warm-white studio background with soft light from the upper left and no reflective floor",
+          "required": true
+        }
+      ],
+      "stages": [
+        "选原始产品图并核对颜色与结构",
+        "分别生成主视觉、细节、结尾三张图片",
+        "人工确认锚定图和一个动作的节拍",
+        "选锚定图执行参考视频并逐帧质检"
+      ],
+      "checklist": [
+        "主推款的真实颜色是否贯穿所有资产",
+        "三张锚定图是否独立完整，不能拼成宫格",
+        "画面只允许一个主要动作，产品轮廓不被遮挡",
+        "若尝试生成文案，保持同一时间一条单行、双色、足够停留"
+      ],
+      "notes": [
+        "前三项 image-image 分别以同一张原始产品图为输入；请单独保存和检查每张，不要上传三宫格作为产品。",
+        "参考视频默认只使用已确认的主视觉 <Picture 1>；若需要三锚定图同时参考，请手动追加图片并明确 Picture 2/3 的细节与版式作用。",
+        "源流程的自动音乐生成、节奏检测、卡点剪辑和文案精确时序均未接入；本地外部后期可完成精确文字与总片合成。生成器尝试单行文案仍可能失败。",
+        "本模板通过离线表单替换字段，不调用 LLM，不自动核验资料、分析音乐、识别图片或改写用户内容。",
+        "逐项选择分镜并手动执行；需要图片输入时，请先保存、检查并自行上传或选择正确参考图，不会自动串联前一步输出。",
+        "图像 1024×1024、视频 512×512/4 秒为低显存探测设置；画质、耗时与显存均未保证。H3 帧网格会令名义 4 秒约为 4.458 秒。"
+      ],
+      "shots": [
+        {
+          "id": "product-hero",
+          "title": "锚定图 1：主视角",
+          "preset": "image-image",
+          "description": "上传原始产品图，保持真实颜色、比例与接口。",
+          "settings": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 6,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Use <Picture 1> as the sole identity source for {{product}}. Preserve its real shape and {{color}}; preserve {{material}}. Make one full-frame three-quarter hero product photograph against {{background}}. Let a controlled edge highlight explain the circular silhouette; keep generous empty space and a believable soft contact shadow. No added buttons, new logos, text, grids, multiple views, reflective stage or fake interface.",
+            "soundscape": "N/A",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "product-detail",
+          "title": "锚定图 2：材质与机构",
+          "preset": "image-image",
+          "description": "再次选择原始产品图；用细节机位核对结构。",
+          "settings": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 6,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Preserve {{product}} from <Picture 1>, especially {{color}} and {{material}}. Create one close product photograph showing the knurled dial and its physical seam, with consistent light and background: {{background}}. The composition must make this mechanism plausible: {{action}}. Maintain scale and material hue. No split-screen, multiple products, labels, invented screws or floating parts.",
+            "soundscape": "N/A",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "product-closing",
+          "title": "锚定图 3：结尾版式",
+          "preset": "image-image",
+          "description": "再次选择原始产品图；检查文字拼写和留白。",
+          "settings": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 6,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Preserve {{product}} from <Picture 1>, with {{color}} and {{material}}, against {{background}}. One full-frame stable product composition, product on the right and one short English line on the left reading exactly \"{{copy}}\". Set a clean semibold sans-serif line with dark-gray first words and final words in the main product hue from {{color}}, never wrapped; maintain generous spacing. No subtitles, second headline, brand logo, grid or storyboard.",
+            "soundscape": "N/A",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "product-film",
+          "title": "Ref2VA：克制动作与文案收束",
+          "preset": "reference-video",
+          "description": "先选确认主视觉锚定图作为 Picture 1；不会自动选择前面结果。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Minimalist product cinematography on {{background}}. [Shot 1] <Subject 1>, {{product}}, fills the right side with a readable silhouette. Preserve {{color}} and {{material}}. During 0-1s a small slow camera truck reveals the edge; during 1-2.5s {{action}}. From 2.5-3.5s one single-line text \"{{copy}}\" gently appears in the empty left space, dark-gray first words and final words in the main product hue from {{color}}, no wrapping. From 3.5-4s stop motion and hold one full-frame closing composition. No product wall, floating HUD or extra slogans.",
+            "soundscape": "One quiet mechanical detent synchronized to the dial, with a low clean studio room tone.",
+            "music": "A restrained moderate-tempo plucked synthesizer and light wooden percussion; no vocals or heavy bass.",
+            "reference": {
+              "subject_definitions": "<Subject 1> is the controller in <Picture 1>, defined by {{product}}, {{color}} and {{material}}.",
+              "summary": "[reference generation] Make a short minimalist concept ad for <Subject 1>, showing {{action}} before a stable closing composition.",
+              "retention_analysis": "<Subject 1> (appears in [Shot 1]): fully_preserved - retain product outline, {{color}} and {{material}}. <Picture 1> provides identity and light behavior, not a multi-panel layout."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "co-op-game-intro-generator",
+      "name": "双人游戏开场：角色与菜单联动",
+      "category": "座舱娱乐",
+      "summary": "先确认双人角色与统一菜单布局，再用轻动作表现 READY 与开场，适合驻车娱乐概念。",
+      "source_url": "https://github.com/MiniMax-AI/MiniMax-H3/blob/199b7d0e1fd95e7b3eafa8c15eca692534142427/skills/co-op-game-intro-generator/SKILL.cn.md",
+      "fields": [
+        {
+          "id": "player_one",
+          "label": "玩家一昵称",
+          "type": "text",
+          "default": "MIA",
+          "required": true
+        },
+        {
+          "id": "player_two",
+          "label": "玩家二昵称",
+          "type": "text",
+          "default": "BO",
+          "required": true
+        },
+        {
+          "id": "game",
+          "label": "游戏概念名",
+          "type": "text",
+          "default": "CAMP SIDEKICKS",
+          "required": true
+        },
+        {
+          "id": "style",
+          "label": "角色和界面风格",
+          "type": "text",
+          "default": "warm stylized clay-like 3D adventure characters, bold silhouettes and clean console-menu design",
+          "required": true
+        },
+        {
+          "id": "palette",
+          "label": "统一配色（不超过5色）",
+          "type": "text",
+          "default": "deep forest-green background, warm cream text, muted coral active controls and small charcoal accents",
+          "required": true
+        }
+      ],
+      "stages": [
+        "填写玩家名、游戏名、视觉风格和配色",
+        "生成菜单确认图并检查角色左右映射",
+        "手动选确认首图生成待机开场",
+        "检查文字、人物身份和单一高亮事件"
+      ],
+      "checklist": [
+        "左侧玩家一与右侧玩家二是否保持明确身份和颜色区分",
+        "菜单不遮挡脸和手，按钮间距与文字层级一致",
+        "同一时间只有一个醒目的主按钮或一个主要交互事件",
+        "角色表情、界面背景与图标材质是否匹配已选风格"
+      ],
+      "notes": [
+        "这是驻车双人娱乐的概念视频，不会生成可运行游戏、可点击菜单或真实车机界面。",
+        "如需真实玩家外观，请先在图像编辑模式用其参考图制作确认首图；模板默认使用原创角色，不自动识别人脸。",
+        "生成文字不能保证精确拼写；若菜单文字失真，减少文字并在外部本地后期排版。",
+        "本模板通过离线表单替换字段，不调用 LLM，不自动核验资料、分析音乐、识别图片或改写用户内容。",
+        "逐项选择分镜并手动执行；需要图片输入时，请先保存、检查并自行上传或选择正确参考图，不会自动串联前一步输出。",
+        "图像 1024×1024、视频 512×512/4 秒为低显存探测设置；画质、耗时与显存均未保证。H3 帧网格会令名义 4 秒约为 4.458 秒。"
+      ],
+      "shots": [
+        {
+          "id": "coop-confirm",
+          "title": "双人菜单确认图",
+          "preset": "text-image",
+          "description": "先检查两个人物、颜色和菜单层级。",
+          "settings": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 6,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "One full-frame console-game start-menu concept for \"{{game}}\" inside a parked camper entertainment screen, not a photograph of a working product. Style: {{style}}. Palette: {{palette}}. Two original adult adventure avatars sit at center: {{player_one}} on the left with crossed ankles and hands behind for support; {{player_two}} on the right with folded legs and hands resting naturally. Use one short player card for each near the upper left, a clear vertical menu on the right and one prominent button reading \"CONTINUE\". Keep faces unobscured, consistent rounded controls, generous margins, clear warm top light and soft contact shadows. No real-world logo or dense interface walls.",
+            "soundscape": "N/A",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "coop-awaken",
+          "title": "首帧开场：从待机到就绪",
+          "preset": "image-video",
+          "description": "选择已确认菜单图，保留角色身份和左右位置。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] Begin with the two avatars, framing, typography and colors in <Picture 1>, using {{style}} and {{palette}}. {{player_one}} stays on the left and {{player_two}} on the right. During 0-1s hold the menu. During 1-2.5s the left avatar glances toward the right avatar and gives one small nod; the right avatar smiles back. During 2.5-3.5s the existing CONTINUE button receives one restrained highlight pulse. During 3.5-4s both settle into the same readable pose. Fixed camera, no extra menu labels, no scene transition or warped screen.",
+            "soundscape": "One soft selection tick and one low ready chime, with subtle character-clothing movement; no dialogue.",
+            "music": "A quiet moderate-tempo pizzicato pattern with a soft two-note woodwind response, no vocals."
+          }
+        },
+        {
+          "id": "coop-reference",
+          "title": "Ref2VA：双人角色反应镜",
+          "preset": "reference-video",
+          "description": "用一张已确认双人菜单图锁定角色与视觉语言。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] In {{style}}, frame the two original players as a medium two-shot in a parked camper game concept. <Subject 1>, {{player_one}}, remains on the left; <Subject 2>, {{player_two}}, remains on the right. Preserve {{palette}} and the established costumes. During 0-1s both look toward a shared off-screen game screen. During 1-3s they raise their nearest hands for one gentle high-five, make contact once, then separate. During 3-4s hold their amused reaction. The camera holds still. No menu text, no extra players, no product branding.",
+            "soundscape": "A single soft high-five contact, a short friendly breathy laugh and quiet parked-cabin ambience; no spoken names.",
+            "music": "A short light pizzicato phrase, lower than the physical contact sound.",
+            "reference": {
+              "subject_definitions": "<Subject 1> is the left avatar {{player_one}} in <Picture 1>. <Subject 2> is the right avatar {{player_two}} in <Picture 1>. The picture also supplies the shared {{style}} appearance.",
+              "summary": "[reference generation] Show the two established avatars completing one friendly high-five while preserving their screen sides and costumes.",
+              "retention_analysis": "<Subject 1> and <Subject 2> (appear in [Shot 1]): fully_preserved - keep identity cues, left/right assignment and costumes. The menu composition of <Picture 1> is not required in this new reaction shot."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "3d-animation-short-generator",
+      "name": "3D 动画短片：故事与连续性",
+      "category": "叙事动画",
+      "summary": "用主动目标、小阻碍和情绪回收组织原创座舱助手故事，先锁角色与无人场景再逐镜生成。",
+      "source_url": "https://github.com/MiniMax-AI/MiniMax-H3/blob/199b7d0e1fd95e7b3eafa8c15eca692534142427/skills/3d-animation-short-generator/SKILL.cn.md",
+      "fields": [
+        {
+          "id": "title",
+          "label": "工作标题",
+          "type": "text",
+          "default": "The Tiny Welcome",
+          "required": true
+        },
+        {
+          "id": "hero",
+          "label": "主角身份与不可改特征",
+          "type": "text",
+          "default": "a palm-sized teal service robot with one cream face panel, two round dark eyes and a short orange scarf",
+          "required": true
+        },
+        {
+          "id": "scene",
+          "label": "同一场景及固定地标",
+          "type": "text",
+          "default": "a parked family-car cabin; cream rear bench at center, circular roof light above and triangular side window on the right",
+          "required": true
+        },
+        {
+          "id": "want",
+          "label": "主角主动目标",
+          "type": "text",
+          "default": "place a small welcome cushion neatly on the rear bench",
+          "required": true
+        },
+        {
+          "id": "obstacle",
+          "label": "小阻碍与预备动作",
+          "type": "text",
+          "default": "the cushion is slightly too tall for its arms; the robot crouches, braces and tries one careful lift",
+          "required": true
+        },
+        {
+          "id": "payoff",
+          "label": "结尾回收",
+          "type": "text",
+          "default": "the cushion lands neatly, but the robot's orange scarf is caught beneath it; the robot frees the scarf with a tiny proud bow",
+          "required": true
+        }
+      ],
+      "stages": [
+        "确认一句话目标、障碍和回收",
+        "分别锁定角色卡与无人场景卡",
+        "检查每秒动作、地标、光位和交接状态",
+        "逐镜生成后人工拼接并检查连续性"
+      ],
+      "checklist": [
+        "主角是否主动解决小阻碍，结局是否回收前面道具",
+        "角色比例、围巾、眼睛和身份轮廓是否跨镜一致",
+        "场景描述中的固定地标、道具状态与光位基线是否稳定",
+        "动作预备—执行—反应可读，分镜备注或参考卡标签不能进入正片"
+      ],
+      "notes": [
+        "模板提供角色卡、场景卡和两段短故事镜头，不是自动完成上游完整长片生产流程。",
+        "两段 Ref2VA 默认只引用 <Picture 1> 的主角卡；可手动追加无人场景卡为 Picture 2 并补齐参考说明。卡片上的注释仅供制作，不应进入最终视频。",
+        "两段之间的服饰和主要道具状态需人工核对；不能保证自动接续。末帧提取、声音桥接和整片剪辑需外部本地软件。",
+        "本模板通过离线表单替换字段，不调用 LLM，不自动核验资料、分析音乐、识别图片或改写用户内容。",
+        "逐项选择分镜并手动执行；需要图片输入时，请先保存、检查并自行上传或选择正确参考图，不会自动串联前一步输出。",
+        "图像 1024×1024、视频 512×512/4 秒为低显存探测设置；画质、耗时与显存均未保证。H3 帧网格会令名义 4 秒约为 4.458 秒。"
+      ],
+      "shots": [
+        {
+          "id": "animation-character",
+          "title": "原创主角卡",
+          "preset": "text-image",
+          "description": "确认主角比例、轮廓、围巾与材质。",
+          "settings": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 6,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Create a single clean character-design reference for the original short film {{title}}. Character: {{hero}}. Warm stylized 3D animation, rounded geometric masses, soft matte materials, small expressive gestures and a readable silhouette. One large three-quarter full-body view on a neutral cream background, no duplicate characters or multi-panel sheet. Keep the scarf, eye shapes and body proportions clear. No existing franchise character, title text, labels or logos.",
+            "soundscape": "N/A",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "animation-environment",
+          "title": "无人场景卡",
+          "preset": "text-image",
+          "description": "检查固定地标与光位，不放入人物或机器人。",
+          "settings": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 6,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "One environment-only concept image for {{title}}: {{scene}}. Warm stylized 3D animation with a soft key light from the upper left and a gentle cool fill from the right window. Establish the fixed landmarks and the main prop needed to {{want}}, with unobstructed movement space. No people, robots, hands, faces, silhouettes, labels or storyboard arrows.",
+            "soundscape": "N/A",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "animation-setup",
+          "title": "故事镜 1：预备与小阻碍",
+          "preset": "reference-video",
+          "description": "选主角卡为 Picture 1，检查结尾道具状态是否适合下一镜。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Warm stylized 3D animation. [Shot 1] <Subject 1> is {{hero}}, at the lower left of {{scene}}. The robot wants to {{want}}. During 0-1s it leans toward the main prop needed to achieve the goal; the camera holds a medium-wide shot with the fixed scene landmarks visible. During 1-2s {{obstacle}}. During 2-3s it wobbles once and recovers while keeping hold of the same prop. During 3-4s it holds a stable pre-completion pose, ready for the next step. Keep the same upper-left warm key light, scene landmarks and character costume. No new character, text or time jump.",
+            "soundscape": "Soft fabric drag, two tiny robot foot taps and a gentle servo whirr timed to the lift. No dialogue.",
+            "music": "Two slow playful woodwind notes above light pizzicato strings, avoiding a large climax.",
+            "reference": {
+              "subject_definitions": "<Subject 1> is the robot in <Picture 1>, defined by {{hero}}. The reference controls character identity and proportions.",
+              "summary": "[reference generation] Establish {{title}} by showing <Subject 1> attempt to {{want}} and overcome a small physical obstacle.",
+              "retention_analysis": "<Subject 1> (appears in [Shot 1]): fully_preserved - retain body shape, eye design and costume from {{hero}}. Use a new composition in {{scene}} without copying reference-card layout."
+            }
+          }
+        },
+        {
+          "id": "animation-payoff",
+          "title": "故事镜 2：放下与情绪回收",
+          "preset": "reference-video",
+          "description": "再次用同一主角参考，人工确认抱枕和围巾的跨镜状态。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Warm stylized 3D animation in {{scene}}, upper-left warm key light and right-side cool fill. [Shot 1] <Subject 1>, {{hero}}, begins in the stable pre-completion pose for its goal to {{want}}, holding the same prop and continuing the intended previous state. During 0-1s it carefully completes the main physical action. During 1-3s {{payoff}}. The camera pushes in with small amplitude at slow speed to reveal the recurring prop and expression. During 3-4s the robot holds its satisfied pose; the fixed scene landmarks keep their established screen positions. No new characters, printed words or sudden prop substitution.",
+            "soundscape": "One soft cushion landing, a small fabric tug and a quiet servo stop; no dialogue.",
+            "music": "A brief pizzicato answer followed by one soft held woodwind note.",
+            "reference": {
+              "subject_definitions": "<Subject 1> is the robot in <Picture 1>: {{hero}}. Keep the established costume and proportions.",
+              "summary": "[reference generation] Complete the small cushion-placement story and reveal its scarf-related comic payoff.",
+              "retention_analysis": "<Subject 1> (appears in [Shot 1]): fully_preserved - preserve the identity features in {{hero}}. The new action state is described explicitly; the reference image is not an exact opening keyframe."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "papercraft-stop-motion-explainer",
+      "name": "纸艺定格科普：分层机关",
+      "category": "知识讲解",
+      "summary": "把一个汽车知识点变成可触摸的纸雕剖面，用纸偶、拉片与分层投影讲清因果。",
+      "source_url": "https://github.com/MiniMax-AI/MiniMax-H3/blob/199b7d0e1fd95e7b3eafa8c15eca692534142427/skills/papercraft-stop-motion-explainer/SKILL.cn.md",
+      "fields": [
+        {
+          "id": "topic",
+          "label": "科普主题",
+          "type": "text",
+          "default": "regenerative braking in an electric car",
+          "required": true
+        },
+        {
+          "id": "learning",
+          "label": "观众应记住的一句话",
+          "type": "text",
+          "default": "some motion energy can return to the battery during deceleration; energy recovery is limited",
+          "required": true
+        },
+        {
+          "id": "metaphor",
+          "label": "纸艺核心机关",
+          "type": "text",
+          "default": "a layered paper wheel connected by a sliding paper path to a small battery pocket",
+          "required": true
+        },
+        {
+          "id": "guide",
+          "label": "纸偶讲解员",
+          "type": "text",
+          "default": "a small paper mechanic with a teal apron and simple hinged arms",
+          "required": true
+        },
+        {
+          "id": "palette",
+          "label": "统一纸材与色板",
+          "type": "text",
+          "default": "clean cream cardstock, teal energy tabs, graphite wheel layers and a muted orange accent",
+          "required": true
+        }
+      ],
+      "stages": [
+        "核对知识目标与简化隐喻",
+        "确认纸偶、4层布景和机关预览",
+        "逐段只解释一个因果节拍",
+        "人工检查机制正确性并完成本地后期"
+      ],
+      "checklist": [
+        "纸材厚度、纤维、折痕和层间投影是否可见",
+        "前景—中景核心模型—背景—远景是否分离",
+        "每镜只有一个知识动作，箭头或卡片没有遮住机制",
+        "没有把能量回收画成永动机或无损循环"
+      ],
+      "notes": [
+        "这是解释性概念动画，简化模型和学习目标需人工核查，不生成工程仿真或性能数据。",
+        "同一张概念图可作为各短段首帧；若需要精确状态接续，请在外部本地软件提取正确末帧后手动上传。",
+        "旁白、精确标签、配乐混音和最终合成不是自动功能；原生 H3 音效可作草稿，教育文案需外部校对。",
+        "本模板通过离线表单替换字段，不调用 LLM，不自动核验资料、分析音乐、识别图片或改写用户内容。",
+        "逐项选择分镜并手动执行；需要图片输入时，请先保存、检查并自行上传或选择正确参考图，不会自动串联前一步输出。",
+        "图像 1024×1024、视频 512×512/4 秒为低显存探测设置；画质、耗时与显存均未保证。H3 帧网格会令名义 4 秒约为 4.458 秒。"
+      ],
+      "shots": [
+        {
+          "id": "papercraft-preview",
+          "title": "纸艺世界与机关预览",
+          "preset": "text-image",
+          "description": "先确认立体舞台与知识隐喻，不塞入长文字。",
+          "settings": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 6,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "A miniature handcrafted paper-theatre explanation of {{topic}}. At center show {{metaphor}}. Place {{guide}} to the left. Material palette: {{palette}}. Build four separated planes: a cut-paper foreground frame, midground working mechanism, rear paper road and distant cream backing. Visible cardstock thickness, fibers, folded joints, soft physical shadows and shallow macro depth of field. Represent the idea {{learning}} with a small finite stack of energy tabs. No numbers, labels, glossy plastic, flat vector art or photoreal vehicle.",
+            "soundscape": "N/A",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "papercraft-mechanism",
+          "title": "知识镜 1：能量走一条路",
+          "preset": "image-video",
+          "description": "选已确认纸艺图为首帧，只让一组纸质机关动作。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] Begin in <Picture 1>, preserving {{guide}}, {{metaphor}} and {{palette}}. During 0-1s hold the four-layer paper stage. During 1-2s the wheel makes one small stepped rotation and slows. During 2-3s one teal paper energy tab travels along the visible sliding path into the battery pocket. During 3-4s the paper mechanic points at the pocket and holds. A slight slow lateral camera move shows real layer parallax. Demonstrate only this learning goal: {{learning}}. No infinite loop, liquid morphing, digital scan or generated labels.",
+            "soundscape": "Cardstock rubbing, one small sliding-paper tap and a restrained paper-joint click. No voiceover.",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "papercraft-limit",
+          "title": "知识镜 2：有限回收的记忆点",
+          "preset": "image-video",
+          "description": "选择概念预览或经人工提取的正确首帧，显示限制而非凭空增加能量。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] Use <Picture 1> as the visible paper-stage opening, with {{metaphor}}, {{guide}} and {{palette}}. Keep the same layered geometry and light. During 0-1s the guide points at a finite group of teal energy tabs. During 1-3s a single paper flap opens to reveal a partially filled battery pocket; one small orange tab remains outside the return path, illustrating that recovery is limited. During 3-4s all parts lock into a stable readable arrangement. Static macro camera. No growing pile, numerical efficiency claim, extra text or smooth CGI movement.",
+            "soundscape": "A paper flap opening, one soft cardboard tap and light paper friction. No dialogue.",
+            "music": "N/A"
+          }
+        }
+      ]
+    },
+    {
+      "id": "paper-collage-explainer-generator",
+      "name": "纸拼贴讲解：视觉隐喻与触感音效",
+      "category": "知识讲解",
+      "summary": "用半调剪影、大色块与逐片组装解释一个座舱概念，默认只保留纸片音效。",
+      "source_url": "https://github.com/MiniMax-AI/MiniMax-H3/blob/199b7d0e1fd95e7b3eafa8c15eca692534142427/skills/paper-collage-explainer-generator/SKILL.cn.md",
+      "fields": [
+        {
+          "id": "idea",
+          "label": "一句话含义",
+          "type": "text",
+          "default": "a quiet personal zone can exist inside a shared parked cabin",
+          "required": true
+        },
+        {
+          "id": "objects",
+          "label": "3–6个主要纸片物件",
+          "type": "text",
+          "default": "one halftone seat silhouette, one passenger cut-out, one rounded boundary shape and three small sound-wave scraps",
+          "required": true
+        },
+        {
+          "id": "palette",
+          "label": "色场与强调色",
+          "type": "text",
+          "default": "a deep forest-green paper field with warm cream keylines and a small muted orange accent",
+          "required": true
+        },
+        {
+          "id": "assembly",
+          "label": "清楚的组装顺序",
+          "type": "text",
+          "default": "seat first, passenger second, boundary third, then the sound-wave scraps settle outside the boundary",
+          "required": true
+        },
+        {
+          "id": "meaning",
+          "label": "最终画面要传达什么",
+          "type": "text",
+          "default": "the passenger is comfortable inside the simple boundary while the shared cabin remains visible outside it",
+          "required": true
+        }
+      ],
+      "stages": [
+        "明确一句话含义、视觉隐喻与物件数量",
+        "先确认完成态静帧与统一纸色场",
+        "按组装顺序生成触感动画",
+        "检查最终关系与纸片音效，人工决定是否需要后期"
+      ],
+      "checklist": [
+        "不读屏幕文字也能理解隐喻，主体不被碎片淹没",
+        "开场背景色与确认图一致，没有自行变成做旧牛皮纸",
+        "运动是出现、滑入、轻回弹、压平、停住，不能全屏一起淡入",
+        "只保留纸片摩擦、轻敲等声音，没有意外旁白或音乐"
+      ],
+      "notes": [
+        "确认图是完成态与风格参考；本地没有尾帧锁定，Ref2VA 只能提示趋近该构图，不能保证逐像素到达。",
+        "默认不添加 BGM、旁白、字幕。若需要，用户应另外准备并在外部本地剪辑软件混入；这里不会自动生成或分析独立音轨。",
+        "本模板没有可编辑纸片分层或关键帧时间线；多段拼接、精确组装轨迹需本地后期。",
+        "本模板通过离线表单替换字段，不调用 LLM，不自动核验资料、分析音乐、识别图片或改写用户内容。",
+        "逐项选择分镜并手动执行；需要图片输入时，请先保存、检查并自行上传或选择正确参考图，不会自动串联前一步输出。",
+        "图像 1024×1024、视频 512×512/4 秒为低显存探测设置；画质、耗时与显存均未保证。H3 帧网格会令名义 4 秒约为 4.458 秒。"
+      ],
+      "shots": [
+        {
+          "id": "collage-finished",
+          "title": "完成态静帧：先看隐喻是否成立",
+          "preset": "text-image",
+          "description": "确认最终关系、3–6个大纸片组及色板。",
+          "settings": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 6,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "One premium editorial paper-collage still explaining {{idea}}. Use {{objects}}. Palette: {{palette}}. Show the final relationship: {{meaning}}. Black-and-white halftone photographic cut-outs, selected colored cardstock, warm cream keylines, visible clean fibers and torn edges, layered seams and soft physical paper shadows. Clear foreground, middle and rear groups with generous empty space. No readable letters, digits, labels, interface, subtitles, logo, dirty kraft paper or multi-panel layout.",
+            "soundscape": "N/A",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "collage-assembly",
+          "title": "Ref2VA：逐片组装",
+          "preset": "reference-video",
+          "description": "选择完成态静帧为 Picture 1，仅作为风格和最终关系参考。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Premium editorial halftone paper collage. [Shot 1] Start from a clean paper field matching {{palette}}, not from a full copy of the completed reference composition. Use the same visual object vocabulary as <Subject 1>: {{objects}}. From 0-1s introduce the first large group; from 1-3s follow this sequence: {{assembly}}. Each part slides or pops in with one tiny bounce, presses flat and pauses. From 3-4s hold a complete readable composition expressing {{meaning}}. Static camera, no text, smooth digital zoom, chaotic spinning or extra objects.",
+            "soundscape": "Tactile paper slides, small press-flat taps and soft rustling, synchronized with each paper group. No dialogue or voiceover.",
+            "music": "N/A",
+            "reference": {
+              "subject_definitions": "<Subject 1> is the completed paper-collage visual relationship in <Picture 1>: {{objects}}, with {{palette}}.",
+              "summary": "[reference generation] Animate a clean paper field assembling into a collage about {{idea}}, using the reference's materials and final visual relationship.",
+              "retention_analysis": "<Subject 1> (appears progressively in [Shot 1]): fully_preserved - retain the approved object vocabulary, halftone material and palette. The opening is intentionally empty; the final arrangement is a compositional target rather than a locked keyframe."
+            }
+          }
+        },
+        {
+          "id": "collage-hold",
+          "title": "完成态轻动效：检查材质与音效",
+          "preset": "image-video",
+          "description": "选确认静帧作首帧；这一变体保持构图，不再做空场组装。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] Begin from the completed collage in <Picture 1>. Preserve {{objects}}, {{palette}} and the relationship {{meaning}}. During 0-1s hold the layout. During 1-3s one boundary paper edge lifts a tiny amount and settles; the three small sound-wave scraps each make one short stepped movement outside the boundary. During 3-4s all parts press flat and stop. Static camera, paper-only micro-movement, no morphing, new objects or text.",
+            "soundscape": "Very soft paper-edge friction, three tiny paper taps and quiet room tone. No speech.",
+            "music": "N/A"
+          }
+        }
+      ]
+    },
+    {
+      "id": "handdrawn-live-video-generator",
+      "name": "手绘实拍融合：触碰、变形与追随",
+      "category": "叙事动画",
+      "summary": "让同一个粗糙粉笔发光实体在驻车实拍空间接触手掌、连续变形，镜头慢半拍追赶。",
+      "source_url": "https://github.com/MiniMax-AI/MiniMax-H3/blob/199b7d0e1fd95e7b3eafa8c15eca692534142427/skills/handdrawn-live-video-generator/SKILL.cn.md",
+      "fields": [
+        {
+          "id": "space",
+          "label": "真实且相邻的拍摄空间",
+          "type": "text",
+          "default": "驻车露营车副驾驶区域、木色小桌与相邻侧窗",
+          "required": true
+        },
+        {
+          "id": "entity",
+          "label": "初始实体与可追踪特征",
+          "type": "text",
+          "default": "一只珊瑚色粉笔小纸船，船尾始终带着同一根卷曲细线",
+          "required": true
+        },
+        {
+          "id": "contact",
+          "label": "手与实体的清楚接触",
+          "type": "text",
+          "default": "拍摄者摊开手掌，小纸船轻触掌心后绕过食指",
+          "required": true
+        },
+        {
+          "id": "transforms",
+          "label": "连续变形链",
+          "type": "text",
+          "default": "小纸船沿同一根尾线展开成纸风车，再卷成细长飘带，始终保留珊瑚色尾线",
+          "required": true
+        },
+        {
+          "id": "route",
+          "label": "可连续追踪的路线",
+          "type": "text",
+          "default": "沿木桌边缘移到座椅缝线，再靠近同一扇侧窗下沿",
+          "required": true
+        },
+        {
+          "id": "ending",
+          "label": "空间级结尾与小笑点",
+          "type": "text",
+          "default": "飘带沿窗框展开成手绘草甸，一片小叶子慢半拍落回掌心",
+          "required": true
+        }
+      ],
+      "stages": [
+        "确认生活空间、接触方式与同一实体线索",
+        "逐段规划接触—追赶—空间变形",
+        "先生成一段，再人工提取末帧选择接续",
+        "检查延迟追拍、手部接触与温柔调性"
+      ],
+      "checklist": [
+        "前3秒内是否看得清真实手掌与手绘实体的接触",
+        "每次新形态是否保留同一颜色尾线，不能替换成新角色",
+        "镜头是否在实体移动后才跟随，而不是稳定锁定主体",
+        "是否保持粉笔毛边、逐帧重画感、非恐怖生活气息"
+      ],
+      "notes": [
+        "上游原方案为15秒16:9连续影像；这里改编成三段名义4秒方形内存测试，不等同原片的时长、画幅或单次连续追拍。需要时可逐段改为较低分辨率16:9。",
+        "后两段必须人工选择与上一段结尾相符的首帧；末帧提取、拼接和稳定的跨段运动需外部本地后期。",
+        "本模板用中文写手绘段落以保留源流程的同语种创作意图；无摄像机输入或自动实拍跟踪功能，画面全部是生成草稿。",
+        "本模板通过离线表单替换字段，不调用 LLM，不自动核验资料、分析音乐、识别图片或改写用户内容。",
+        "逐项选择分镜并手动执行；需要图片输入时，请先保存、检查并自行上传或选择正确参考图，不会自动串联前一步输出。",
+        "图像 1024×1024、视频 512×512/4 秒为低显存探测设置；画质、耗时与显存均未保证。H3 帧网格会令名义 4 秒约为 4.458 秒。"
+      ],
+      "shots": [
+        {
+          "id": "handdrawn-touch",
+          "title": "短段 1：明确触碰",
+          "preset": "text-video",
+          "description": "先验证手掌接触、粗糙笔触和拍摄质感。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] 实拍手机影像与平面手绘发光动画融合，场景为{{space}}，全程驻车、同一处生活空间。初始实体是{{entity}}。0–1秒，手持镜头近距离看到小桌与摊开的真实手掌；1–3秒，{{contact}}，接触点可见轻微粉笔亮痕；3–4秒，小纸船从手边向桌沿离开，镜头在它离开中心后才慢半拍轻摇追随。线条像粗糙粉笔和彩色铅笔，略抖动、涂色不均、边缘有毛边，温柔而顽皮。不要3D玩具、光滑霓虹、突然新角色、巨大眼睛、牙齿或跳吓。",
+            "soundscape": "轻微衣料声、手掌擦过桌面的声音，以及实体接触时细小粉笔摩擦声。无人声。",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "handdrawn-chase",
+          "title": "短段 2：同一实体连续变形",
+          "preset": "image-video",
+          "description": "在外部提取前段末帧后上传为首帧，保持路线方向。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] 从<Picture 1>的真实手、小桌和手绘实体状态继续，保持{{space}}的布局、自然光与{{entity}}的可追踪尾线。0–1秒，实体沿已建立方向离开手掌；1–3秒，{{transforms}}，每个变化都从原来的同一根线条展开，不能凭空换成另一个角色；沿{{route}}前进，摄影者伸手想接住它；3–4秒，飘带停在同一侧窗下沿，镜头慢半拍向它移动后短暂停住。保持平面手绘覆盖真实物体的触感、粉笔毛边与轻微重画抖动，不切换地点，不使用恐怖元素。",
+            "soundscape": "指尖轻碰座椅布面、细小的粉笔擦动声和安静车内环境声。无对白。",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "handdrawn-finale",
+          "title": "短段 3：空间展开与小回收",
+          "preset": "image-video",
+          "description": "选择已匹配的飘带停在窗沿的末帧；检查尾线连续性。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] 以<Picture 1>中由{{entity}}变成的同一条飘带和{{space}}为开场，保留窗框、手掌、光位与线条质感。0–1秒，飘带贴着真实窗框轻轻展开；1–3秒，{{ending}}，所有新增线条从原有尾线向外生长，形成可追踪的空间级变化；摄影者重新摊开手掌接住小叶子；3–4秒，镜头迟半拍看向掌心，保留一个安静可爱的停顿。发光是粗糙粉笔亮边，不是光滑灯带；没有新生物、跳吓、黑屏或突然换景。",
+            "soundscape": "窗边轻微空气声、纸叶落在掌心的轻擦声，最后环境音自然保留。无对白。",
+            "music": "N/A"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-video-subtitle-generator",
+      "name": "音乐美学 MV：角色、场景与歌词规划",
+      "category": "座舱娱乐",
+      "summary": "把原创短句、人物和空间文字作为分开的设计任务，规划驻车休憩的音乐情绪片。",
+      "source_url": "https://github.com/MiniMax-AI/MiniMax-H3/blob/199b7d0e1fd95e7b3eafa8c15eca692534142427/skills/music-video-subtitle-generator/SKILL.cn.md",
+      "fields": [
+        {
+          "id": "character",
+          "label": "原创表演者外观",
+          "type": "text",
+          "default": "an adult passenger with a short dark bob, a cream jacket and a muted teal scarf",
+          "required": true
+        },
+        {
+          "id": "scene",
+          "label": "统一场景与光线",
+          "type": "text",
+          "default": "a stationary concept-car cabin at blue hour, warm side light and soft rain on the window",
+          "required": true
+        },
+        {
+          "id": "aesthetic",
+          "label": "影像与文字美学",
+          "type": "text",
+          "default": "fine film grain, restrained editorial framing, dark blue and cream with one teal accent",
+          "required": true
+        },
+        {
+          "id": "lyric",
+          "label": "锁定的一句原创歌词",
+          "type": "text",
+          "default": "Find a little room to breathe.",
+          "required": true
+        },
+        {
+          "id": "music",
+          "label": "音乐草案方向",
+          "type": "text",
+          "default": "slow soft-pop at roughly 80 BPM, muted kick, warm electric piano and sparse plucked bass",
+          "required": true
+        },
+        {
+          "id": "type_style",
+          "label": "文字包装方案",
+          "type": "text",
+          "default": "one short single-line cream phrase near the window, never across the eyes or mouth",
+          "required": true
+        }
+      ],
+      "stages": [
+        "锁定原创短句、音乐意图和人物/场景/文字分工",
+        "先看人物与场景确认图",
+        "生成一段表演草稿与一段文字氛围草稿",
+        "人工选择主音轨，在外部本地后期对齐与合成"
+      ],
+      "checklist": [
+        "歌词原文是否一致，没有擅自补词、翻译或重复",
+        "文字是否作为空间设计元素，并避开脸和嘴",
+        "两段的人物、服装、色调与光线是否一致",
+        "精确歌词、口型、节拍与镜头衔接是否经人工复核"
+      ],
+      "notes": [
+        "当前界面不上传音乐或视频参考，不检测 BPM、歌词时码或强拍；music 字段只是生成音轨的描述，不会播放或复制用户歌曲。",
+        "两段 H3 原生音轨是独立草稿，不是统一主音轨。长MV、精确歌词字幕、口型对齐、卡点剪辑、混音与整体调色需外部本地后期。",
+        "默认歌词为本模板的原创短句。若填写已有歌词，请自行确认可用范围；表单会原样替换，不自动续写。",
+        "本模板通过离线表单替换字段，不调用 LLM，不自动核验资料、分析音乐、识别图片或改写用户内容。",
+        "逐项选择分镜并手动执行；需要图片输入时，请先保存、检查并自行上传或选择正确参考图，不会自动串联前一步输出。",
+        "图像 1024×1024、视频 512×512/4 秒为低显存探测设置；画质、耗时与显存均未保证。H3 帧网格会令名义 4 秒约为 4.458 秒。"
+      ],
+      "shots": [
+        {
+          "id": "mv-keyvisual",
+          "title": "人物与场景确认图",
+          "preset": "text-image",
+          "description": "只确认角色、服装、场景与文字安全区，不预先烧入歌词。",
+          "settings": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 6,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Create one editorial music-video concept still. Character: {{character}} seated in {{scene}}. Visual language: {{aesthetic}}. Medium close-up with the face in the left half, window and clean negative space at right, natural skin texture and restrained expression. Keep the mouth unobscured and hands relaxed. Typography plan for later production: {{type_style}}; do not render the words yet. No logos, subtitles, multiple panels, beauty-filter skin or extra performers.",
+            "soundscape": "N/A",
+            "music": "N/A"
+          }
+        },
+        {
+          "id": "mv-performance",
+          "title": "Ref2VA：一句歌词表演草稿",
+          "preset": "reference-video",
+          "description": "选择人物与场景确认图作为 Picture 1，仅验证身份和短句表演。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "Editorial music-video style: {{aesthetic}}. [Shot 1] <Subject 1>, {{character}}, sits in {{scene}}. During 0-1s the performer takes one quiet preparatory breath, framed in a medium close-up. During 1-3s the performer (S1), with a soft clear voice, sings the exact original line <d>[English] {{lyric}}</d>, with restrained head motion and visible natural mouth movement. During 3-4s the mouth closes and the performer looks toward the rainy window. One slow small camera push, no scene change, added lyrics or on-screen text.",
+            "soundscape": "Quiet parked-cabin room tone, soft rain on the window and one restrained breath; the lyric remains in the shot description.",
+            "music": "{{music}}; keep the accompaniment below the sung line and do not add additional vocal lines.",
+            "reference": {
+              "subject_definitions": "<Subject 1> is the performer in <Picture 1>, defined by {{character}}. The picture also guides the wardrobe, light direction and cabin atmosphere.",
+              "summary": "[reference generation] Produce a short performance study of <Subject 1> singing one locked original lyric in a stationary cabin.",
+              "retention_analysis": "<Subject 1> (appears in [Shot 1]): fully_preserved - preserve the facial features, hairstyle and costume described in {{character}}. <Picture 1> supplies appearance and atmosphere, not a copied audio track."
+            }
+          }
+        },
+        {
+          "id": "mv-typography",
+          "title": "文字氛围草稿：单一事件",
+          "preset": "image-video",
+          "description": "选确认图作首帧；精确排字仍需人工后期复核。",
+          "settings": {
+            "width": 512,
+            "height": 512,
+            "steps": 20,
+            "duration": 4
+          },
+          "prompt": {
+            "visual": "[Shot 1] Begin from <Picture 1> with {{character}} in {{scene}}. Preserve {{aesthetic}}. From 0-1s the performer keeps their lips closed and looks outside. From 1-2s reveal exactly one line \"{{lyric}}\" using this plan: {{type_style}}. From 2-3s the phrase makes one small rhythmic displacement near the window without touching the face. From 3-4s hold the same readable phrase and then stop the motion. Fixed camera, no second lyric, subtitle bar, new person or automatic scene cut.",
+            "soundscape": "Soft rain and quiet ventilation only; no second sung performance.",
+            "music": "{{music}} as an independent instrumental sketch only, no vocals; this is not a continuation of an uploaded or previous master track."
+          }
+        }
+      ]
+    }
+  ]
+}

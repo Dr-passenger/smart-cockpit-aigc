@@ -4,6 +4,7 @@
   const $ = (query, root = document) => root.querySelector(query);
   const $$ = (query, root = document) => Array.from(root.querySelectorAll(query));
   const STORAGE_KEY = '智能座舱AIGC.workflow.v1';
+  const TEMPLATE_DRAFT_KEY = '智能座舱AIGC.template-drafts.v1';
   const TYPES = ['prompt', 'reference', 'settings', 'generate', 'output'];
   const META = {
     prompt: { title: '文本提示词', color: 'pink', width: 350, height: 315 },
@@ -23,7 +24,8 @@
   const state = {
     workflow: null, system: null, connected: false, jobs: [], filter: 'all', selected: null,
     view: { x: 24, y: 24, scale: .85 }, drag: null, link: null, submitting: false, uploading: false,
-    lastResult: null, saveTimer: null, historyBusy: false,
+    lastResult: null, saveTimer: null, historyBusy: false, workflowDirty: false,
+    templates: { catalog: null, loading: false, error: '', query: '', selectedId: null, shotId: null, drafts: Object.create(null), preview: null, restored: false },
   };
   const viewport = $('#canvas-viewport');
   const world = $('#canvas-world');
@@ -42,6 +44,27 @@
   function finite(value, fallback, min = -10000, max = 10000) {
     const number = Number(value);
     return Number.isFinite(number) && number >= min && number <= max ? number : fallback;
+  }
+  function sanitizeTemplateMetadata(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const identifier = /^[a-zA-Z0-9_./-]{1,200}$/;
+    if (!identifier.test(raw.id || '') || !identifier.test(raw.shotId || '') || typeof raw.name !== 'string' || !raw.name.trim() || raw.name.length > 200 || typeof raw.shotTitle !== 'string' || !raw.shotTitle.trim() || raw.shotTitle.length > 200) return null;
+    if (!raw.fieldValues || typeof raw.fieldValues !== 'object' || Array.isArray(raw.fieldValues) || Object.keys(raw.fieldValues).length > 40) return null;
+    const fieldValues = Object.create(null);
+    for (const [key, value] of Object.entries(raw.fieldValues)) {
+      if (!/^[a-zA-Z0-9_-]{1,80}$/.test(key) || ['__proto__', 'constructor', 'prototype'].includes(key) || typeof value !== 'string' || value.length > 2000) return null;
+      fieldValues[key] = value;
+    }
+    const metadata = { id: raw.id, name: raw.name, shotId: raw.shotId, shotTitle: raw.shotTitle, fieldValues };
+    if (raw.source && typeof raw.source === 'object') {
+      metadata.source = { repository: String(raw.source.repository || '').slice(0, 200), revision: String(raw.source.revision || '').slice(0, 100), url: externalSourceUrl(raw.source.url) || '' };
+    }
+    return metadata;
+  }
+  function externalSourceUrl(value) {
+    if (typeof value !== 'string' || value.length > 2000) return null;
+    try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password ? url.href : null; }
+    catch { return null; }
   }
   function toast(message, error = false) {
     const item = document.createElement('div');
@@ -113,21 +136,29 @@
     if (base.settings.mode === 'ref2va') base.settings.model = 'video';
     if (raw.reference && typeof raw.reference.id === 'string' && raw.reference.id.length < 300 && safeUrl(raw.reference.url)) base.reference = { id: raw.reference.id, url: safeUrl(raw.reference.url), name: String(raw.reference.name || '参考图像').slice(0, 200) };
     if (Array.isArray(raw.references)) base.references = raw.references.filter(asset => asset && typeof asset.id === 'string' && asset.id.length < 300 && safeUrl(asset.url)).slice(0, 9).map(asset => ({ id: asset.id, url: safeUrl(asset.url), name: String(asset.name || '参考图像').slice(0, 200) }));
+    const templateMetadata = sanitizeTemplateMetadata(raw.template);
+    if (templateMetadata) base.template = templateMetadata;
     return base;
+  }
+  function persistWorkflow() {
+    clearTimeout(state.saveTimer);
+    state.saveTimer = null;
+    if (!state.workflow || !state.workflowDirty) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.workflow));
+      state.workflowDirty = false;
+      $('#saved-indicator').style.background = '#8da76c';
+      $('#saved-indicator').title = '已保存到此浏览器';
+    } catch {
+      $('#saved-indicator').style.background = '#c18b79';
+      $('#saved-indicator').title = '浏览器存储不可用，请导出工作流保存';
+    }
   }
   function save() {
     clearTimeout(state.saveTimer);
+    state.workflowDirty = true;
     $('#saved-indicator').style.background = '#c0b47f';
-    state.saveTimer = setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state.workflow));
-        $('#saved-indicator').style.background = '#8da76c';
-        $('#saved-indicator').title = '已保存到此浏览器';
-      } catch {
-        $('#saved-indicator').style.background = '#c18b79';
-        $('#saved-indicator').title = '浏览器存储不可用，请导出工作流保存';
-      }
-    }, 300);
+    state.saveTimer = setTimeout(persistWorkflow, 300);
   }
   function requestReplace(callback) {
     if (!state.workflow.prompt.trim() && !state.workflow.reference && !state.workflow.references?.length) { callback(); return; }
@@ -143,11 +174,14 @@
     renderNodes();
     requestAnimationFrame(focusWorkflow);
     save();
+    persistWorkflow();
   }
   function updateHeading() {
     const preset = PRESETS[state.workflow.preset];
-    $('#workflow-title').innerHTML = `${escapeHtml(preset.title)} <span>${preset.number}</span>`;
-    $('#workflow-subtitle').textContent = preset.subtitle;
+    const template = state.workflow.template;
+    $('#workflow-title').innerHTML = template ? `${escapeHtml(template.name)} <span class="template-heading-shot">${escapeHtml(template.shotTitle)}</span>` : `${escapeHtml(preset.title)} <span>${preset.number}</span>`;
+    $('#workflow-subtitle').textContent = template ? `${preset.title} · 模板分镜已应用，审阅后可单独运行。` : preset.subtitle;
+    $('.breadcrumb strong').textContent = template ? template.name : '未命名工作流';
     $$('.preset').forEach(button => button.classList.toggle('active', button.dataset.preset === state.workflow.preset));
   }
   function syncInspector() {
@@ -578,6 +612,238 @@
     });
     $('#preview-dialog').showModal();
   }
+  function templateCore() {
+    if (!globalThis.H3TemplateCore) throw new Error('本地模板组件未加载，请刷新页面；请确认 template-core.js 文件完整。');
+    return globalThis.H3TemplateCore;
+  }
+  function selectedTemplate() {
+    return state.templates.catalog?.templates.find(template => template.id === state.templates.selectedId) || null;
+  }
+  function selectedShot(template = selectedTemplate()) {
+    return template?.shots.find(shot => shot.id === state.templates.shotId) || template?.shots[0] || null;
+  }
+  function loadTemplateDrafts() {
+    if (state.templates.draftsReady) return;
+    state.templates.draftsReady = true;
+    try {
+      const saved = JSON.parse(localStorage.getItem(TEMPLATE_DRAFT_KEY) || '{}');
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
+      for (const [id, fields] of Object.entries(saved).slice(0, 20)) {
+        if (!/^[a-zA-Z0-9_./-]{1,200}$/.test(id) || ['__proto__', 'constructor', 'prototype'].includes(id) || !fields || typeof fields !== 'object' || Array.isArray(fields)) continue;
+        const values = Object.create(null);
+        for (const [key, value] of Object.entries(fields).slice(0, 40)) {
+          if (/^[a-zA-Z0-9_-]{1,80}$/.test(key) && !['__proto__', 'constructor', 'prototype'].includes(key) && typeof value === 'string') values[key] = value.slice(0, 2000);
+        }
+        state.templates.drafts[id] = values;
+      }
+    } catch { /* Browser storage can be unavailable; in-memory drafts still work. */ }
+  }
+  function saveTemplateDrafts() {
+    try { localStorage.setItem(TEMPLATE_DRAFT_KEY, JSON.stringify(state.templates.drafts)); }
+    catch { $('#template-draft-status').textContent = '当前浏览器无法持久保存草稿，请导出计划。'; }
+  }
+  function draftFor(template) {
+    loadTemplateDrafts();
+    if (!Object.hasOwn(state.templates.drafts, template.id)) state.templates.drafts[template.id] = Object.create(null);
+    const draft = state.templates.drafts[template.id];
+    template.fields.forEach(field => { if (!Object.hasOwn(draft, field.id)) draft[field.id] = String(field.default || '').slice(0, 2000); });
+    return draft;
+  }
+  function restoreAppliedTemplate() {
+    const metadata = state.workflow.template;
+    if (!metadata) return false;
+    const signature = JSON.stringify(metadata);
+    if (signature === state.templates.appliedSignature) return false;
+    const template = state.templates.catalog?.templates.find(item => item.id === metadata.id);
+    if (!template) return false;
+    loadTemplateDrafts();
+    const existingFieldIds = new Set(Object.keys(state.templates.drafts[template.id] || {}));
+    const draft = draftFor(template);
+    template.fields.forEach(field => {
+      if (!existingFieldIds.has(field.id) && Object.hasOwn(metadata.fieldValues, field.id)) draft[field.id] = metadata.fieldValues[field.id];
+    });
+    state.templates.selectedId = template.id;
+    state.templates.shotId = template.shots.some(shot => shot.id === metadata.shotId) ? metadata.shotId : template.shots[0].id;
+    state.templates.appliedSignature = signature;
+    saveTemplateDrafts();
+    return true;
+  }
+  async function openTemplates() {
+    $('#templates-dialog').showModal();
+    loadTemplateDrafts();
+    if (!state.templates.catalog) await loadTemplates();
+    else {
+      const restored = restoreAppliedTemplate();
+      if (restored || state.templates.selectedId) renderTemplateDetail();
+      else showTemplateCatalog();
+    }
+  }
+  async function loadTemplates() {
+    if (state.templates.loading) return;
+    state.templates.loading = true;
+    state.templates.error = '';
+    $('#template-load-state').hidden = false;
+    $('#template-load-state').textContent = '正在加载本地模板…';
+    $('#retry-templates').hidden = true;
+    $('#template-catalog').hidden = true;
+    $('#template-detail').hidden = true;
+    try {
+      const raw = await api('/skill-templates.json');
+      state.templates.catalog = templateCore().validateCatalog(raw);
+      $('#template-load-state').hidden = true;
+      $('.template-library-entry small').textContent = `${state.templates.catalog.templates.length} 个创作流程 · 离线可用`;
+      restoreAppliedTemplate();
+      if (state.templates.selectedId) renderTemplateDetail();
+      else showTemplateCatalog();
+    } catch (error) {
+      state.templates.error = error.message;
+      $('#template-load-state').textContent = `模板库加载失败：${error.message}`;
+      $('#retry-templates').hidden = false;
+    } finally { state.templates.loading = false; }
+  }
+  function showTemplateCatalog() {
+    $('#template-catalog').hidden = false;
+    $('#template-detail').hidden = true;
+    $('#templates-dialog-title').textContent = '官方 Skill 模板库';
+    renderTemplateCards();
+  }
+  function renderTemplateCards() {
+    const catalog = state.templates.catalog;
+    if (!catalog) return;
+    const query = state.templates.query.trim().toLocaleLowerCase();
+    const templates = catalog.templates.filter(template => [template.name, template.id, template.category, template.summary].some(value => String(value).toLocaleLowerCase().includes(query)));
+    $('#template-result-count').textContent = `${templates.length} / ${catalog.templates.length} 个模板`;
+    $('#template-no-results').hidden = templates.length > 0;
+    $('#template-cards').innerHTML = templates.map((template, index) => `<button class="template-card" data-template-id="${escapeHtml(template.id)}"><span class="template-card-topline"><span class="template-category">${escapeHtml(template.category)}</span><span class="template-card-number">${String(index + 1).padStart(2, '0')}</span></span><strong>${escapeHtml(template.name)}</strong><span class="template-card-summary">${escapeHtml(template.summary)}</span><span class="template-card-footer"><span>${template.shots.length} 个镜头 · ${template.fields.length} 项需求</span><span>查看模板</span></span></button>`).join('');
+    $('#template-catalog-source').textContent = `${catalog.source.repository} · ${catalog.source.revision.slice(0, 12)} · 模板随应用离线提供`;
+  }
+  function renderTemplateDetail() {
+    const template = selectedTemplate();
+    if (!template) { state.templates.selectedId = null; showTemplateCatalog(); return; }
+    const shot = selectedShot(template);
+    state.templates.shotId = shot.id;
+    const draft = draftFor(template);
+    $('#template-catalog').hidden = true;
+    $('#template-detail').hidden = false;
+    $('#templates-dialog-title').textContent = '配置创作模板';
+    $('#template-name').textContent = template.name;
+    $('#template-category').textContent = template.category;
+    $('#template-summary').textContent = template.summary;
+    const sourceUrl = externalSourceUrl(template.source_url) || externalSourceUrl(state.templates.catalog.source.url);
+    $('#template-source-link').hidden = !sourceUrl;
+    if (sourceUrl) $('#template-source-link').href = sourceUrl;
+    $('#template-stages').innerHTML = template.stages.map((stage, index) => `<li><span>${String(index + 1).padStart(2, '0')}</span>${escapeHtml(stage)}</li>`).join('');
+    $('#template-fields').innerHTML = template.fields.map((field, index) => `<div class="template-field"><label for="template-field-${index}">${escapeHtml(field.label)}${field.required ? '<span>必填</span>' : ''}</label>${field.type === 'textarea' ? `<textarea id="template-field-${index}" data-template-field="${escapeHtml(field.id)}" maxlength="2000" rows="3"${field.required ? ' required' : ''}>${escapeHtml(draft[field.id])}</textarea>` : `<input id="template-field-${index}" type="text" data-template-field="${escapeHtml(field.id)}" maxlength="2000" value="${escapeHtml(draft[field.id])}"${field.required ? ' required' : ''}>`}</div>`).join('');
+    $('#template-checklist').innerHTML = template.checklist.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+    $('#template-notes').innerHTML = template.notes.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+    $('#template-review-count').textContent = `${template.checklist.length} 项检查`;
+    renderTemplateShotList();
+    updateTemplatePreview();
+  }
+  function renderTemplateShotList() {
+    const template = selectedTemplate();
+    if (!template) return;
+    $('#template-shot-count').textContent = `${template.shots.length} 个镜头`;
+    $('#template-shots').innerHTML = template.shots.map((shot, index) => `<button class="template-shot${state.templates.shotId === shot.id ? ' active' : ''}" data-template-shot="${escapeHtml(shot.id)}" aria-pressed="${state.templates.shotId === shot.id}"><span>${String(index + 1).padStart(2, '0')}</span>${escapeHtml(shot.title)}</button>`).join('');
+  }
+  function retainedAssets(previous = state.workflow) {
+    const candidates = previous.settings.mode === 'ref2va' ? [...(previous.references || [])] : [previous.reference, ...(previous.references || [])];
+    const seen = new Set();
+    return candidates.filter(asset => asset && typeof asset.id === 'string' && safeUrl(asset.url) && !seen.has(asset.id) && seen.add(asset.id)).map(asset => ({ id: asset.id, name: asset.name, url: safeUrl(asset.url) }));
+  }
+  function templateReferenceSummary(preset, previous = state.workflow) {
+    const assets = retainedAssets(previous);
+    if (preset === 'reference-video') return assets.length ? `将沿用 ${Math.min(assets.length, 9)} 张本机参考图，按顺序对应 <Picture 1> 等编号；运行前请核对。` : '此镜头需要参考图。应用后请在参考图节点上传，最多 9 张。';
+    if (PRESETS[preset].reference) return assets.length ? `将沿用第一张参考图「${assets[0].name}」。其余参考素材仍保留，可在画布中替换。` : '此镜头需要一张参考图。应用后请在参考图节点上传。';
+    return assets.length ? '此镜头不使用参考图；已有本机参考素材会保留供其它镜头使用。' : '此镜头使用文本生成，无需上传参考图。';
+  }
+  function updateTemplatePreview() {
+    const template = selectedTemplate();
+    const shot = selectedShot(template);
+    if (!template || !shot) return;
+    $('#template-shot-title').textContent = shot.title;
+    $('#template-shot-description').textContent = shot.description;
+    const s = shot.settings;
+    $('#template-shot-settings').textContent = `${PRESETS[shot.preset].title} · ${s.width} × ${s.height} · ${s.steps} 步${PRESETS[shot.preset].model === 'video' ? ` · ${s.duration} 秒` : ''}`;
+    $('#template-reference-status').textContent = templateReferenceSummary(shot.preset);
+    $('#template-preview-error').hidden = true;
+    state.templates.preview = null;
+    try {
+      const rendered = templateCore().renderShot(template, shot, draftFor(template));
+      if (rendered.prompt.length > 16000) throw new Error('生成提示词超过 16000 字符，请缩短创作需求。');
+      state.templates.preview = rendered;
+      $('#template-prompt-preview').value = rendered.prompt;
+      $('#template-prompt-count').textContent = `${rendered.prompt.length} / 16000`;
+      $('#apply-template-shot').disabled = false;
+      $('#export-template-plan').disabled = false;
+    } catch (error) {
+      $('#template-prompt-preview').value = '';
+      $('#template-prompt-count').textContent = '等待完整需求';
+      $('#template-preview-error').textContent = error.message;
+      $('#template-preview-error').hidden = false;
+      $('#apply-template-shot').disabled = true;
+      $('#export-template-plan').disabled = true;
+    }
+  }
+  function buildTemplateWorkflow(template, shot, rendered, values, previous = state.workflow) {
+    const workflow = createWorkflow(rendered.preset);
+    workflow.prompt = rendered.prompt;
+    Object.assign(workflow.settings, rendered.settings);
+    const assets = retainedAssets(previous);
+    workflow.references = assets.slice(0, 9);
+    workflow.reference = assets[0] || null;
+    workflow.template = {
+      id: template.id, name: template.name, shotId: shot.id, shotTitle: shot.title,
+      fieldValues: Object.fromEntries(template.fields.map(field => [field.id, values[field.id]])),
+      source: { ...state.templates.catalog.source },
+    };
+    return sanitizeWorkflow(workflow);
+  }
+  function applyTemplateShot() {
+    if (state.uploading) { toast('参考图正在上传，请等待完成后再应用镜头。'); return; }
+    if (!$('#template-fields').reportValidity()) return;
+    const template = selectedTemplate();
+    const shot = selectedShot(template);
+    if (!template || !shot) return;
+    try {
+      const values = { ...draftFor(template) };
+      const rendered = templateCore().renderShot(template, shot, values);
+      const workflow = buildTemplateWorkflow(template, shot, rendered, values);
+      const referenceMessage = templateReferenceSummary(shot.preset);
+      requestReplace(() => {
+        applyWorkflow(workflow);
+        state.templates.appliedSignature = JSON.stringify(workflow.template);
+        saveTemplateDrafts();
+        $('#templates-dialog').close();
+        toast(`已应用「${shot.title}」。${referenceMessage}`);
+      });
+    } catch (error) { toast(error.message, true); }
+  }
+  function downloadJson(value, name) {
+    const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = name; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function exportTemplatePlan() {
+    if (!$('#template-fields').reportValidity()) return;
+    const template = selectedTemplate();
+    if (!template) return;
+    try {
+      const values = { ...draftFor(template) };
+      const plan = templateCore().buildPlan(state.templates.catalog, template, values);
+      plan.shots = plan.shots.map(planned => {
+        const shot = template.shots.find(item => item.id === planned.id);
+        const rendered = templateCore().renderShot(template, shot, values);
+        return { ...planned, workflow: buildTemplateWorkflow(template, shot, rendered, values) };
+      });
+      plan.requires_manual_review = true;
+      plan.exported_at = new Date().toISOString();
+      downloadJson(plan, `智能座舱AIGC-${template.id.replace(/[^a-zA-Z0-9_-]/g, '_')}-分镜计划.json`);
+      toast('全部分镜计划已导出。计划包含可导入的逐镜工作流，参考图文件请单独保留。');
+    } catch (error) { toast(error.message, true); }
+  }
   function exportWorkflow() {
     const blob = new Blob([JSON.stringify(state.workflow, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -673,9 +939,18 @@
     if (target.closest('[data-delete-node]')) deleteNode(target.closest('.graph-node').dataset.nodeId);
     if (target.closest('[data-run]')) submitJob();
     if (target.closest('[data-upload]')) $('#reference-file').click();
-    if (target.closest('[data-remove-reference]')) { state.workflow.reference = null; renderNodes(); save(); }
+    if (target.closest('[data-remove-reference]')) {
+      const removedId = state.workflow.reference?.id;
+      state.workflow.reference = null;
+      state.workflow.references = (state.workflow.references || []).filter(asset => asset.id !== removedId);
+      renderNodes(); save();
+    }
     const removeMultiple = target.closest('[data-remove-reference-id]');
-    if (removeMultiple) { state.workflow.references = (state.workflow.references || []).filter(asset => asset.id !== removeMultiple.dataset.removeReferenceId); renderNodes(); save(); }
+    if (removeMultiple) {
+      state.workflow.references = (state.workflow.references || []).filter(asset => asset.id !== removeMultiple.dataset.removeReferenceId);
+      if (state.workflow.reference?.id === removeMultiple.dataset.removeReferenceId) state.workflow.reference = null;
+      renderNodes(); save();
+    }
   });
   $$('.preset').forEach(button => button.addEventListener('click', () => {
     if (button.dataset.preset === state.workflow.preset) return;
@@ -686,6 +961,7 @@
     const selection = event.target.value;
     const nextModel = selection === 'ref2va' ? 'video' : selection;
     const s = state.workflow.settings;
+    delete state.workflow.template;
     s.model = nextModel;
     s.mode = selection === 'ref2va' ? 'ref2va' : 'standard';
     s.steps = nextModel === 'video' ? 20 : 6;
@@ -715,6 +991,42 @@
   $('#zoom-out').addEventListener('click', () => zoom(1 / 1.2));
   $('#zoom-in').addEventListener('click', () => zoom(1.2));
   $('#fit-view').addEventListener('click', fitView);
+  $('#open-templates').addEventListener('click', openTemplates);
+  $('#open-templates-sidebar').addEventListener('click', openTemplates);
+  $('#retry-templates').addEventListener('click', loadTemplates);
+  $('#template-search').addEventListener('input', event => { state.templates.query = event.target.value; renderTemplateCards(); });
+  $('#clear-template-search').addEventListener('click', () => { state.templates.query = ''; $('#template-search').value = ''; renderTemplateCards(); $('#template-search').focus(); });
+  $('#template-cards').addEventListener('click', event => {
+    const card = event.target.closest('[data-template-id]');
+    if (!card) return;
+    const template = state.templates.catalog.templates.find(item => item.id === card.dataset.templateId);
+    if (!template) return;
+    state.templates.selectedId = template.id;
+    state.templates.shotId = template.shots[0].id;
+    renderTemplateDetail();
+    $('#template-name').tabIndex = -1;
+    $('#template-name').focus({ preventScroll: true });
+  });
+  $('#template-back').addEventListener('click', () => { state.templates.selectedId = null; state.templates.shotId = null; showTemplateCatalog(); $('#template-search').focus(); });
+  $('#template-fields').addEventListener('submit', event => event.preventDefault());
+  $('#template-fields').addEventListener('input', event => {
+    const field = event.target.closest('[data-template-field]');
+    const template = selectedTemplate();
+    if (!field || !template || !template.fields.some(item => item.id === field.dataset.templateField)) return;
+    draftFor(template)[field.dataset.templateField] = field.value.slice(0, 2000);
+    saveTemplateDrafts();
+    updateTemplatePreview();
+  });
+  $('#template-shots').addEventListener('click', event => {
+    const button = event.target.closest('[data-template-shot]');
+    if (!button || !selectedTemplate()?.shots.some(shot => shot.id === button.dataset.templateShot)) return;
+    state.templates.shotId = button.dataset.templateShot;
+    renderTemplateShotList();
+    updateTemplatePreview();
+    $$('#template-shots button').find(item => item.dataset.templateShot === state.templates.shotId)?.focus({ preventScroll: true });
+  });
+  $('#apply-template-shot').addEventListener('click', applyTemplateShot);
+  $('#export-template-plan').addEventListener('click', exportTemplatePlan);
   $('#export-workflow').addEventListener('click', exportWorkflow);
   $('#import-workflow').addEventListener('click', () => $('#workflow-file').click());
   $('#workflow-file').addEventListener('change', async event => {
@@ -760,6 +1072,8 @@
     if (event.key === 'Escape') { state.link = null; drawConnections(); }
     if ((event.key === 'Delete' || event.key === 'Backspace') && state.selected && !event.target.closest('input, textarea, select, [contenteditable]') && !$('dialog[open]')) { event.preventDefault(); deleteNode(state.selected); }
   });
+  window.addEventListener('pagehide', persistWorkflow);
+  window.addEventListener('beforeunload', persistWorkflow);
   let previousViewportWidth = 0;
   new ResizeObserver(() => {
     const currentWidth = viewport.clientWidth;
