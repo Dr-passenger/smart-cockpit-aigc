@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>智能座舱AIGC · 离线节点工作台</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="智能座舱AIGC 工作台首页"><svg class="brand-cockpit" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M7 23a17 17 0 0 1 34 0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M8 31V24h32v7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="24" cy="29" r="10" fill="#15171b" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="29" r="3" stroke="currentColor" stroke-width="2"/><path d="m15 25 6 3m12-3-6 3m-3 4v7M14 15h5m10 0h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>智能座舱AIGC<span class="brand-sub">OFFLINE CREATIVE STUDIO</span></span></a>
+      <div class="local-badge"><span class="status-dot"></span>本机离线工作台<span class="badge-tag">LOCAL</span></div>
+      <div class="sidebar-heading">工作流预设 <span>05</span></div>
+      <nav class="preset-list" aria-label="工作流预设">
+        <button class="preset active" data-preset="text-image"><span class="preset-icon">▧</span><span>文生图<small>Text to image</small></span></button>
+        <button class="preset" data-preset="image-image"><span class="preset-icon">▨</span><span>图生图<small>Image to image</small></span></button>
+        <button class="preset" data-preset="text-video"><span class="preset-icon">▷</span><span>文生视频<small>Text to video</small></span></button>
+        <button class="preset" data-preset="image-video"><span class="preset-icon">▣</span><span>图生视频<small>Image to video</small></span></button>
+        <button class="preset" data-preset="reference-video"><span class="preset-icon">▦</span><span>参考生视频<small>Ref2VA · 多图参考</small></span></button>
+      </nav>
+      <div class="sidebar-heading library-heading">节点库 <span>添加到画布</span></div>
+      <div class="node-library">
+        <button data-add-node="prompt"><span class="library-dot pink"></span>文本提示词 <span>＋</span></button>
+        <button data-add-node="reference"><span class="library-dot blue"></span>参考图像 <span>＋</span></button>
+        <button data-add-node="settings"><span class="library-dot purple"></span>模型与尺寸 <span>＋</span></button>
+        <button data-add-node="generate"><span class="library-dot green"></span>本地采样器 <span>＋</span></button>
+        <button data-add-node="output"><span class="library-dot amber"></span>结果预览 <span>＋</span></button>
+      </div>
+      <div class="sidebar-bottom">
+        <div class="hardware-card"><span class="eyebrow">计算设备</span><strong id="gpu-name">等待硬件检测</strong><div id="hardware-meta">正在连接本地服务…</div><button id="open-system" class="text-button">查看部署检查</button></div>
+        <div class="sidebar-footer">智能座舱AIGC <span>v1.0</span></div>
+      </div>
+    </aside>
+    <main class="main-area">
+      <header class="topbar">
+        <div class="breadcrumb">工作空间<span>/</span><strong>未命名工作流</strong><span id="saved-indicator" class="saved-dot" title="已保存到此浏览器"></span></div>
+        <div class="topbar-actions"><button id="import-workflow" class="button subtle">导入工作流</button><button id="export-workflow" class="button subtle">导出工作流</button><span class="topbar-separator"></span><button id="run-top" class="button primary"><span>▶</span> 运行工作流 <kbd>Ctrl ↵</kbd></button></div>
+      </header>
+      <div class="workspace-heading"><div><div class="eyebrow">CREATE SOMETHING NEW</div><h1 id="workflow-title">图像创作工作流 <span>01</span></h1><p id="workflow-subtitle">让想象从一句话开始，在节点间自由连接。</p></div><button id="history-toggle" class="button history-button">◷ 任务记录 <span id="job-count">0</span></button></div>
+      <div class="deployment-banner" id="deployment-banner"><span class="banner-icon">i</span><span><strong>本地部署预检中</strong><span id="deployment-message">正在检查模型、依赖与硬件。原版完整模型在 16 GB 显存上的可用性尚未验证。</span></span><button id="banner-system" aria-label="查看部署检查">详情</button></div>
+      <div class="editor-layout">
+        <section class="canvas-panel" aria-label="工作流节点画布">
+          <div class="canvas-topline"><span><span class="status-dot"></span>NODE GRAPH <span class="canvas-slash">/</span> <span id="node-count">4 NODES</span></span><span>拖动标题移动 · 端口连线</span></div>
+          <div class="canvas-viewport" id="canvas-viewport" tabindex="0" aria-label="节点画布，可拖动空白处平移或使用滚轮缩放">
+            <div id="canvas-world" class="canvas-world"><svg id="connections" class="connections" aria-hidden="true"></svg><div id="nodes"></div></div>
+            <div id="canvas-empty" class="canvas-empty" hidden>从左侧添加节点，或选择一个工作流预设。</div>
+            <div class="canvas-controls"><button id="zoom-out" aria-label="缩小">−</button><span id="zoom-value">100%</span><button id="zoom-in" aria-label="放大">＋</button><span class="control-divider"></span><button id="fit-view" aria-label="适应画布" title="适应画布">⛶</button></div>
+            <div class="canvas-help"><kbd>Del</kbd> 删除节点 <span>·</span> 滚轮缩放</div>
+          </div>
+          <div class="canvas-status"><span><span class="status-dot" id="connection-dot"></span><span id="connection-status">连接本地服务中</span></span><span id="graph-status">工作流已连接</span></div>
+        </section>
+        <aside class="inspector">
+          <div class="inspector-title"><span>运行设置</span><span class="inspector-icon">☷</span></div>
+          <div class="inspector-content">
+            <label class="field-label" for="model-select">模型 <span>MODEL</span></label>
+            <select id="model-select"><option value="image">MiniMax-H3-image</option><option value="video">MiniMax-H3</option><option value="ref2va">MiniMax-H3 · Ref2VA 参考模型</option></select>
+            <div class="model-note"><span class="library-dot green"></span>本地推理 · 不连接远程服务</div>
+            <div class="section-divider"></div>
+            <label class="field-label">输出尺寸 <span>RESOLUTION</span></label>
+            <div class="dimensions"><label><span>宽度</span><input id="width-input" type="number" min="256" max="4096" step="32" value="1024"></label><span>×</span><label><span>高度</span><input id="height-input" type="number" min="256" max="4096" step="32" value="1024"></label></div>
+            <div class="resolution-presets"><button data-resolution="1024,1024">1:1</button><button data-resolution="768,1024">3:4</button><button data-resolution="1024,768">4:3</button><button data-resolution="1024,576">16:9</button></div>
+            <div class="setting-line"><label for="steps-input">采样步数</label><input id="steps-input" type="number" min="1" max="100" value="6" disabled></div>
+            <p class="field-help" id="steps-note">官方图像模型固定使用 6 步。</p>
+            <div class="setting-line duration-setting" hidden><label for="duration-input">视频时长 <span class="muted">秒</span></label><input id="duration-input" type="number" min="4" max="15" step="1" value="4"></div>
+            <p class="field-help" id="duration-note" hidden>时长按实际帧数对齐，4 秒请求约为 4.458 秒。视频尺寸须为 32 的倍数，像素总量不超过 1280 × 768。</p>
+            <label class="field-label seed-label" for="seed-input">随机种子 <button id="randomize-seed" class="text-button" title="使用随机种子" type="button">随机 ↻</button></label>
+            <input id="seed-input" type="number" min="-1" max="2147483647" value="-1">
+            <p class="field-help">−1 使用随机种子；固定数值便于复现。</p>
+            <div class="section-divider"></div>
+            <div class="run-summary"><span id="summary-mode">图像生成</span><strong id="summary-size">1024 × 1024</strong></div>
+            <button id="run-main" class="button primary run-main">▶ <span>加入生成队列</span><span></span></button>
+            <p class="offline-note">任务由此电脑执行。实际支持的模型、尺寸与参考图能力以本地后端检查为准。</p>
+          </div>
+          <div class="inspector-tip"><span>✦</span><div><strong>连接你的创作思路</strong><p>从节点右侧的圆点拖到目标输入。所有工作流会自动保存在此浏览器。</p></div></div>
+        </aside>
+      </div>
+      <section class="jobs-panel" id="jobs-panel" aria-label="任务队列与历史记录">
+        <div class="jobs-header"><div><strong>任务队列</strong><span id="queue-count">0 个进行中</span></div><div class="jobs-tabs"><button class="active" data-job-filter="all">全部</button><button data-job-filter="active">进行中</button><button data-job-filter="succeeded">已完成</button><button id="refresh-history" aria-label="刷新任务记录" title="刷新">↻</button></div></div>
+        <div id="jobs-list" class="jobs-list"><div class="empty-jobs"><span>⌁</span><div>还没有生成任务<small>连接节点，写下提示词，让灵感开始流动。</small></div></div></div>
+      </section>
+      <footer class="main-footer"><span><span class="status-dot"></span>离线优先 · 文件保存在本机</span><span>智能座舱AIGC <span class="footer-divider">/</span> EXPERIMENTAL</span></footer>
+    </main>
+  </div>
+  <input type="file" id="workflow-file" accept="application/json,.json" hidden>
+  <input type="file" id="reference-file" accept="image/png,image/jpeg,image/webp" hidden>
+  <dialog id="system-dialog"><div class="dialog-header"><div><div class="eyebrow">LOCAL DEPLOYMENT</div><h2>本地部署检查</h2></div><button class="icon-button" data-close-dialog="system-dialog" aria-label="关闭">×</button></div><div id="system-details"></div><div class="dialog-actions"><button id="recheck-system" class="button primary">重新检查</button><button class="button" data-close-dialog="system-dialog">关闭</button></div></dialog>
+  <dialog id="preview-dialog" class="preview-dialog"><div class="dialog-header"><h2 id="preview-title">生成结果</h2><button class="icon-button" data-close-dialog="preview-dialog" aria-label="关闭">×</button></div><div id="preview-content"></div></dialog>
+  <dialog id="confirm-dialog"><div class="dialog-header"><h2>替换当前工作流？</h2></div><p class="confirm-copy">此操作会替换画布上的节点、连接和参数。可先通过「导出」保存当前工作流。</p><div class="dialog-actions"><button class="button" id="confirm-no">保留当前工作流</button><button class="button primary" id="confirm-yes">替换工作流</button></div></dialog>
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+</body>
+</html>
