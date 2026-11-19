@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "verified_on": "2026-11-19",
+  "python": "3.12.x, Windows x86_64",
+  "comfyui": {
+    "repository": "https://github.com/Comfy-Org/ComfyUI.git",
+    "commit": "a277b5bf213e8a44fa34817b7770b54f86ef4cea",
+    "source_url": "https://github.com/Comfy-Org/ComfyUI/tree/a277b5bf213e8a44fa34817b7770b54f86ef4cea"
+  },
+  "pytorch": {
+    "torch": "2.11.0",
+    "torchvision": "0.26.0",
+    "index_url": "https://download.pytorch.org/whl/cu128",
+    "source_url": "https://pytorch.org/get-started/previous-versions/"
+  },
+  "notes": [
+    "The official source commit and published package versions were checked; target GPU execution has not been tested.",
+    "Engine requirements are read from the pinned ComfyUI source, with project constraints. The actual resolved environment is saved to data/install/engine-freeze.txt during setup.",
+    "Model repository revisions, byte sizes and LFS SHA256 values are pinned separately in runtime/models.json."
+  ]
+}

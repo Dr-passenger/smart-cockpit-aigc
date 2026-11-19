@@ -1,0 +1,13 @@
+.venv/
+engine/
+data/
+wheelhouse/
+__pycache__/
+*.py[cod]
+.env
+*.log
+*.safetensors
+*.pt
+*.pth
+.DS_Store
+.pytest_cache/
